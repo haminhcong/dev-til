@@ -8,6 +8,10 @@ Something noted during my software development experiment
 - https://jmgarridopaz.github.io/content/hexagonalarchitecture.html
 - https://wkrzywiec.medium.com/ports-adapters-architecture-on-example-19cab9e93be7
 - https://github.com/wkrzywiec/library-hexagonal
+- https://herbertograca.com/2017/09/14/ports-adapters-architecture/
+- https://github.com/wso2/reference-architecture/blob/master/reference-architecture-layered-segmented.md
+- https://github.com/wso2/reference-architecture/blob/master/reference-architecture-cell-based.md
+- https://netflixtechblog.com/ready-for-changes-with-hexagonal-architecture-b315ec967749
 
 ## How to write a well-maintain software
 
