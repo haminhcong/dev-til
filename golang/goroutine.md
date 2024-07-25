@@ -53,7 +53,48 @@ Goroutines are an abstraction over threads and a single Operating System thread 
 **So How are goroutines scheduled?**
 
 - <https://www.youtube.com/watch?v=YHRO5WQGh0k>
-- 
+- <https://dev.to/girishg4t/internals-of-goroutines-and-channels-397p>
+
+Internals of Go Scheduling
+
+Arguably, one of the more important aspects of the Go run-time is the goroutine scheduler. The runtime keeps track of each goroutine, and will schedule them to run in turn on a pool of thr eads belonging to the process. Goroutines are separate from threads but rely upon them to run, and scheduling goroutines onto threads effectively is crucial for the efficient performance of Go programs. The idea behind goroutines is that they are capable of running concurrently,like threads, but are also extremely lightweight in comparison. So, while there might be multiple threads created for a process running a Go program, the ratio of goroutines to threads should be much higher than 1-to-1. Multiple threads are often necessary to ensure that goroutines are not unnecessarily blocked. When one goroutine makes a blocking call,the thread running it must block. Therefore, at least one more thread should be created by the runtime to continue the execution of other goroutines that are not in blocking calls. Multiple threads are allowed to run in parallel upto a programmer defined maximum, which is stored in the variable GOMAXPROCS[6].
+
+THE SCHED STRUCT
+
+The Sched struct is a single, global struct[9] that keeps track of the different queues of G’s and M’s and some other information the scheduler needs in order to run, such as the global Sched lock. There are two queues containing G structs, one is the runnable queue where M’s can find work, and the other is a free list of G’s. There is only one queue pertaining to M’s that the scheduler maintains; the M’s in this queue are idle and waiting for work. In order to modify these queues,the global Sched lock must be held. See figure 4.
+
+The runtime starts out with several G’s. One is in charge of garbage collection, another is in charge of scheduling, and one represents the user’s Go code. Initially, one M is created to kick off the runtime. As the program progresses,more G’s may be created by the user’s Go program, and more M’s may become necessary to run all the G’s. As this happens, the runtime may provision additional threads upto GOMAXPROCS. Hence at any given time, there are at most GOMAXPROCS active M’s.
+
+Since M’s represent threads, an M is required to run a goroutine. An M without a currently associated G will pick up a G from the global runnable queue and run the Go code belonging to that G. If the Go code requires the M to block,for instance by invoking a system call, then another M will be woken up from the global queue of idle M’s. This is done to ensure that goroutines, still capable of running, are not blocked from running by the lack of an available M.
+
+System calls force the calling thread to trap to the kernel,causing it to block for the duration of the system call execution. If the code associated with a G makes a blocking system call, the M running it will be unable to run it or any other G until the system call returns. M’s do not exhibit the same blocking behavior for channel communication, even though goroutines block on channel communication. The operating system does not know about channel communication, and the intricacies of channels are handled purely by the runtime. If a goroutine makes a channel call, it may need to block, but there is no reason that the M running that G should be forced to block as well. In a case such as this, the G’s status is set to waiting and the M that was previously running it continues running other G’s until the channel communication is complete. At that point the G’s status is set back to runnable and will be run as soon as there is an M capable of running it.
+
+**When does a goroutine exit?**
+
+Firstly, we always have a main goroutine. This is the programs main "thread" (see, it's hard to avoid this word when discussing them!). When this main goroutine terminates, our program is complete. You always need to keep this in mind as if we do not account for this in our program, you may see some unexpected behaviour. If you look at the example of using goroutines above again, the program will not wait for either of the goroutines to complete before terminating the program. This is why we have to use a time.Sleep() but this means our program has a race condition.
+
+From this main goroutine, we can create as many goroutines as we like, and within those goroutines, we can create goroutines. The below is totally valid go:
+
+
+**Are goroutines called in the order I declared them?**
+
+No.
+
+Most Operating Systems have something called a preemptive scheduler. This means that which thread is executed next is determined by the OS itself based on thread priority and other things like waiting to receive data over the network. Since goroutines are abstractions over threads, they all have the same priority and we therefore cannot control the order in which they run.
+
+There has been discussions as far back as 2016 (you can read one such discussion here) about adding the ability to set priority on individual goroutines, but there is some pretty compelling points raised as to why its not a good idea.
+
+**How Goroutines works**
+
+Goroutines take the idea of threads a step further.
+
+Goroutines are cooperatively scheduled, rather than relying on the kernel to manage their time sharing.
+
+The switch between goroutines only happens at well defined points, when an explicit call is made to the Go runtime scheduler.
+
+The compiler knows the registers which are in /use and saves them automatically.
+
+![](./images/fon6mmdhrm6e5ph4jpob.jpg)
 
 
 ### Goroutine example: HTTPTimeoutHandler in Go Built-in HTTP Server Package
