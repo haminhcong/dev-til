@@ -1,0 +1,163 @@
+# Global variables Golang
+
+TL;DR: Don't over used global variables in Golang. But in some cases, for example for storing database connections, global variables is a suitable solution.
+
+## Quick introduction
+
+Global variables in Golang are variables declared outside of any function, making them accessible throughout the entire package. These variables are generally declared at the package level, and their visibility depends on whether they are exported (i.e., start with a capital letter) or unexported (start with a lowercase letter).
+
+Here’s an example of declaring and using a global variable in a Go program:
+
+```golang
+package main
+
+import "fmt"
+
+// Declare a global variable
+var globalVar string = "I'm a global variable!"
+
+func main() {
+	// Access the global variable
+	fmt.Println(globalVar) // Output: I'm a global variable!
+}
+```
+
+In this example, we declare a global variable called globalVar at the package level and initialize it with a string value. We then access this global variable from the main function and print its value to the console.
+
+## Keep Global Variables Unexported Unless Necessary
+
+By default, global variables should be unexported (i.e., start with a lowercase letter) to limit their visibility to the current package. This helps to encapsulate your code and prevent unintended external access to your global variables. Only export global variables when it’s necessary for them to be accessed from other packages.
+
+## Use Cases for Global Variables
+
+There are certain situations where using global variables can be beneficial. Here are a few use cases where global variables might be appropriate:
+
+**Configuration Settings**
+
+Global variables can be useful for storing application-wide configuration settings, such as API keys, database connection strings, or feature flags. By declaring these settings as global variables, you can access them from anywhere in your application without having to pass them around as function arguments.
+
+**Singletons and Shared Resources**
+
+In some cases, you may want to share a single instance of a resource, such as a database connection pool or a logging system, throughout your application. Global variables can help you achieve this by providing a single point of access for these shared resources.
+
+**Caching**
+
+Global variables can be used for caching, allowing you to store and access precomputed values across different functions in your program. By caching expensive computations or frequently accessed data in global variables, you can improve your application’s performance and reduce the load on external systems.
+
+## Organising Database Access in Go
+
+### 1b. Global variable with an InitDB function
+
+A variation on the 'global variable' approach that I sometimes see uses an initialisation function to set up the connection pool, like so:
+
+```golang
+
+package models
+
+import (
+    "database/sql"
+
+    _ "github.com/lib/pq"
+)
+
+// This time the global variable is unexported.
+var db *sql.DB
+
+// InitDB sets up setting up the connection pool global variable.
+func InitDB(dataSourceName string) error {
+    var err error
+
+    db, err = sql.Open("postgres", dataSourceName)
+    if err != nil {
+        return err
+    }
+
+    return db.Ping()
+}
+
+type Book struct {
+    Isbn   string
+    Title  string
+    Author string
+    Price  float32
+}
+
+func AllBooks() ([]Book, error) {
+    // This now uses the unexported global variable.
+    rows, err := db.Query("SELECT * FROM books")
+    if err != nil {
+        return nil, err
+    }
+    defer rows.Close()
+
+    var bks []Book
+
+    for rows.Next() {
+        var bk Book
+
+        err := rows.Scan(&bk.Isbn, &bk.Title, &bk.Author, &bk.Price)
+        if err != nil {
+            return nil, err
+        }
+
+        bks = append(bks, bk)
+    }
+    if err = rows.Err(); err != nil {
+        return nil, err
+    }
+
+    return bks, nil
+}  
+```
+
+```golang
+package main
+
+import (
+    "fmt"
+    "log"
+    "net/http"
+
+    "bookstore.alexedwards.net/models"
+)
+
+func main() {
+    // Use the InitDB function to initialise the global variable.
+    err := models.InitDB("postgres://user:pass@localhost/bookstore")
+    if err != nil {
+        log.Fatal(err)
+    }
+
+    http.HandleFunc("/books", booksIndex)
+    http.ListenAndServe(":3000", nil)
+}
+
+
+// booksIndex sends a HTTP response listing all books.
+func booksIndex(w http.ResponseWriter, r *http.Request) {
+    bks, err := models.AllBooks()
+    if err != nil {
+        log.Print(err)
+        http.Error(w, http.StatusText(500), 500)
+        return
+    }
+
+    for _, bk := range bks {
+        fmt.Fprintf(w, "%s, %s, %s, £%.2f\n", bk.Isbn, bk.Title, bk.Author, bk.Price)
+    }
+}     
+...  
+```
+
+This is a small tweak to the global variable pattern, but it gives us a few nice benefits:
+
+- All the database-related code now lives a single package, including the code to set up the connection pool.
+- The global db variable is not exported, which removes the possibility of it being accidentally mutated by other packages at runtime.
+- During testing, you can reuse the InitDB() function to initialise a connection pool to your test database (by calling it from TestMain() before your tests run).
+
+
+## References
+
+- <https://www.alexedwards.net/blog/organising-database-access>
+- <https://github.com/gothinkster/golang-gin-realworld-example-app/issues/15>
+- <https://codabase.io/5307/golang-global-variables-best-practices/>
